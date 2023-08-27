@@ -45,7 +45,6 @@ void cudaVec<T>::add(const cudaVec *otherVec) {
 }
 
 
-
 int main() {
     int N = 500;
 
