@@ -1,0 +1,2 @@
+nvcc reduceAtomicGlobal.cu -o reduceAtomicGlobal
+nsys profile -o reduceAtomicGlobal --stats=true ./reduceAtomicGlobal
