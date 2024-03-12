@@ -107,11 +107,11 @@ public:
 
     void write_raw_value() {
         //check if current is a list and add comma if count[current] > 0
-        if(!is_context_stack_empty() && is_array_context() && has_siblings()) {
+        if(!is_context_stack_empty() && is_array_context() && !is_first_member()) {
                 add_comma();
         }
         //increment count
-        increment_siblings_count();
+        register_member();
         //TODO
     }
 
@@ -163,7 +163,7 @@ public:
             if(is_object_context()) {
                 if(next_token == json_token::FIELD_NAME) {
                     // add comma if count[current] > 0
-                    if(has_siblings()) {
+                    if(!is_first_member()) {
                         add_comma();
                     }
                     // add key
@@ -198,11 +198,11 @@ public:
     void consume_value_token(json_token next_token) {
 
         //check if current is a list and add comma if count[current] > 0
-        if(!is_context_stack_empty() && is_array_context() && has_siblings()) {
+        if(!is_context_stack_empty() && is_array_context() && !is_first_member()) {
                 add_comma();
         }
         //increment count
-        increment_siblings_count();
+        register_member();
 
         // if value token
         switch (next_token) {
@@ -266,7 +266,7 @@ public:
     }
 
 private:
-    int count[max_json_nesting_depth] = {0};
+    bool has_members[max_json_nesting_depth] = {false};
     item type[max_json_nesting_depth] = {item::EMPTY};
     int current = -1;
 
@@ -287,23 +287,23 @@ private:
     }
 
     void pop_curr_context() {
-        count[current] = 0;
+        has_members[current] = false;
         type[current] = item::EMPTY;
         current--;
     }
 
-    bool has_siblings() {
-        return count[current] > 0;
+    bool is_first_member() {
+        return has_members[current] == false;
     }
 
-    void increment_siblings_count() {
-        count[current]++;
+    void register_member() {
+        has_members[current] = true;
     }
 
     void initialize_new_context(item _item) {
         current++;
         type[current] = _item;
-        count[current] = 0;
+        has_members[current] = false;
     }
 
     void add_start_array() {
@@ -341,7 +341,7 @@ private:
 
 int main() {
     // Example tokens
-    list<json_token> parser2 = {
+    list<json_token> parser = {
         json_token::START_OBJECT,
         json_token::FIELD_NAME,
         json_token::VALUE_STRING,
@@ -390,7 +390,7 @@ int main() {
         json_token::END_OBJECT
     };
 
-    list<json_token> parser = {
+    list<json_token> parser2 = {
         json_token::END_ARRAY
     };
 
