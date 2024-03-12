@@ -47,17 +47,10 @@ enum class json_token {
 };
 
 
+enum class item { OBJECT, ARRAY, EMPTY };
+
 template <int max_json_nesting_depth>
 class json_generator {
-private:
-    enum class item { OBJECT, ARRAY, EMPTY };
-    int count[max_json_nesting_depth] = {0};
-    item type[max_json_nesting_depth] = {item::EMPTY};
-    int current = -1;
-
-    // char const* const output;
-    char* const output;
-    size_t output_len;
 
 public:
     json_generator(char* _output, size_t _output_len): output(_output), output_len(_output_len) 
@@ -75,48 +68,23 @@ public:
         }
     }
 
-    // json_generator finish_child_generator(json_generator const& child_generator)
-    // {
-    //     // logically delete child generator
-    //     output_len += child_generator.get_output_len();
-    // }
+    json_generator finish_child_generator(json_generator const& child_generator)
+    {
+        // logically delete child generator ?? TODO
+        output_len += child_generator.get_output_len();
+    }
 
     size_t get_output_len() const { return output_len; }
 
-
-    bool is_context_stack_empty() {
-        return current == -1;
+    char* get_output_start_position() const {
+        return output;
     }
 
-    bool is_object_context() {
-        return type[current] == item::OBJECT;
+    char* get_current_output_position() const {
+        return output + get_output_len();
     }
 
-    bool is_array_context() {
-        return type[current] == item::ARRAY;
-    }
-
-    void pop_curr_context() {
-        count[current] = 0;
-        type[current] = item::EMPTY;
-        current--;
-    }
-
-    bool has_siblings() {
-        return count[current] > 0;
-    }
-
-    void increment_siblings_count() {
-        count[current]++;
-    }
-
-    void initialize_new_context(item _item) {
-        current++;
-        type[current] = _item;
-        count[current] = 0;
-    }
-
-    void add_output(const char* str, size_t len) {
+    void write_output(const char* str, size_t len) {
         if (output != nullptr) {
             std::memcpy(output + output_len, str, len);
             output_len = output_len + len;
@@ -124,31 +92,36 @@ public:
     }
 
     void write_start_array() {
-        add_output("[",1);
+        // new current
+        initialize_new_context(item::ARRAY);
+        // add [
+        add_start_array();
     }
 
     void write_end_array() {
-        add_output("]",1);
+        // add ]
+        add_end_array();
+        // pop
+        pop_curr_context();
     }
 
-    void write_start_object() {
-        add_output("{",1);
+    void write_raw_value() {
+        //check if current is a list and add comma if count[current] > 0
+        if(!is_context_stack_empty() && is_array_context() && has_siblings()) {
+                add_comma();
+        }
+        //increment count
+        increment_siblings_count();
+        //TODO
     }
 
-    void write_end_object() {
-        add_output("}",1);
-    }
-
-    void write_true() {
-        add_output("true",4);
-    }
-
-    void write_false() {
-        add_output("false",4);
-    }
-
-    void write_comma() {
-        add_output(",", 1);
+    void copy_current_structure(list<json_token> parser) {
+        while(!parser.empty()) {
+            auto token = parser.front();
+            // cout << enumToString(token) << endl;
+            parser.pop_front();
+            consume_token(token);
+        }
     }
 
     std::string enumToString(json_token token) {
@@ -191,16 +164,16 @@ public:
                 if(next_token == json_token::FIELD_NAME) {
                     // add comma if count[current] > 0
                     if(has_siblings()) {
-                        write_comma();
+                        add_comma();
                     }
                     // add key
-                    add_output("\"key\"", 5);
+                    write_output("\"key\"", 5);
                     // add :
-                    add_output(":", 1);
+                    write_output(":", 1);
                 }
                 else if(next_token == json_token::END_OBJECT) {
                     // add }
-                    write_end_object();
+                    add_end_object();
                     // pop
                     pop_curr_context();
                 }
@@ -209,7 +182,7 @@ public:
             else {
                 if(next_token == json_token::END_ARRAY) {
                     // add ]
-                    write_end_array();
+                    add_end_array();
                     // pop
                     pop_curr_context();
                 }
@@ -217,15 +190,16 @@ public:
         }
         else {
             // Invalid JSON PARSER
+            cout << "ERROR: INVALID JSON" << endl;
         }
-        
+        return;
     }
 
     void consume_value_token(json_token next_token) {
 
         //check if current is a list and add comma if count[current] > 0
         if(!is_context_stack_empty() && is_array_context() && has_siblings()) {
-                write_comma();
+                add_comma();
         }
         //increment count
         increment_siblings_count();
@@ -236,46 +210,42 @@ public:
                 // new current
                 initialize_new_context(item::OBJECT);
                 // add {
-                write_start_object();
+                add_start_object();
                 break;
             case json_token::START_ARRAY:
                 // new current
                 initialize_new_context(item::ARRAY);
                 // add [
-                write_start_array();
+                add_start_array();
                 break;
             case json_token::VALUE_TRUE:
                 // add true
-                write_true();
+                add_true();
                 break;
             case json_token::VALUE_FALSE:
                 // add false
-                write_false();
+                add_false();
+                break;
+            case json_token::VALUE_NULL:
+                // add null
+                add_null();
                 break;
             case json_token::VALUE_NUMBER_INT:
                 // add int
-                add_output("1",1);
+                write_output("1",1);
                 break;
             case json_token::VALUE_NUMBER_FLOAT:
                 // add float
-                add_output("1.0",3);
+                write_output("1.0",3);
                 break;
             case json_token::VALUE_STRING:
                 // add value
-                add_output("\"value\"",7);
+                write_output("\"value\"",7);
                 break;
             default:
                 // Invalid JSON PARSER
+                cout << "ERROR: INVALID JSON" << endl;
                 break;
-        }
-    }
-
-    void copy_current_structure(list<json_token> parser) {
-        while(!parser.empty()) {
-            auto token = parser.front();
-            // cout << enumToString(token) << endl;
-            parser.pop_front();
-            consume_token(token);
         }
     }
 
@@ -287,14 +257,91 @@ public:
         }
     }
 
-    int getCurrent() {
+    int getCurrent() const{
         return current;
+    }
+
+    bool is_complete_json() const {
+        return getCurrent() == -1;
+    }
+
+private:
+    int count[max_json_nesting_depth] = {0};
+    item type[max_json_nesting_depth] = {item::EMPTY};
+    int current = -1;
+
+    // char const* const output;
+    char* const output;
+    size_t output_len;
+
+    bool is_context_stack_empty() {
+        return current == -1;
+    }
+
+    bool is_object_context() {
+        return type[current] == item::OBJECT;
+    }
+
+    bool is_array_context() {
+        return type[current] == item::ARRAY;
+    }
+
+    void pop_curr_context() {
+        count[current] = 0;
+        type[current] = item::EMPTY;
+        current--;
+    }
+
+    bool has_siblings() {
+        return count[current] > 0;
+    }
+
+    void increment_siblings_count() {
+        count[current]++;
+    }
+
+    void initialize_new_context(item _item) {
+        current++;
+        type[current] = _item;
+        count[current] = 0;
+    }
+
+    void add_start_array() {
+        write_output("[",1);
+    }
+
+    void add_end_array() {
+        write_output("]",1);
+    }
+
+    void add_start_object() {
+        write_output("{",1);
+    }
+
+    void add_end_object() {
+        write_output("}",1);
+    }
+
+    void add_true() {
+        write_output("true",4);
+    }
+
+    void add_false() {
+        write_output("false",4);
+    }
+
+    void add_null() {
+        write_output("null",4);
+    }
+
+    void add_comma() {
+        write_output(",", 1);
     }
 };
 
 int main() {
     // Example tokens
-    list<json_token> parser = {
+    list<json_token> parser2 = {
         json_token::START_OBJECT,
         json_token::FIELD_NAME,
         json_token::VALUE_STRING,
@@ -343,9 +390,9 @@ int main() {
         json_token::END_OBJECT
     };
 
-    // list<json_token> parser = {
-    //     json_token::VALUE_STRING
-    // };
+    list<json_token> parser = {
+        json_token::END_ARRAY
+    };
 
     const int max_output_len = 1000; // Derived after first pass
     char* const output = new char[max_output_len];
@@ -355,7 +402,7 @@ int main() {
     generator.copy_current_structure(parser);
 
     // Get generated JSON string
-    cout << "IS VALID JSON PARSER: " << (generator.getCurrent() == -1) << endl;
+    cout << "IS COMPLETE JSON: " << generator.is_complete_json() << endl;
     std::string jsonString = generator.getJsonString();
     std::cout << "Generated JSON: " << jsonString << std::endl;
 
